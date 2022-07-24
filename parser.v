@@ -1,4 +1,4 @@
-module parser
+module main
 
 pub struct Parser {
 	pub:
