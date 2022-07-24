@@ -1,6 +1,8 @@
 module main
 
 pub struct Parser {
+	pub mut:
+		tags map[string]Tag
 	pub:
 		input string
 	mut:
@@ -12,9 +14,15 @@ pub struct Parser {
 		next_ch u8
 }
 
-pub fn new(input string) Parser {
+pub fn new(input string, tags ...Tag) Parser {
+	mut tags_map := map[string]Tag{}
+	for tag in tags {
+		tags_map[tag.name] = tag
+	}
+
 	mut p := Parser {
-		input: input
+		input: input,
+		tags: tags_map
 	}
 
 	p.skip(2)
@@ -48,6 +56,8 @@ fn (mut p Parser) collect_block() []u8 {
 	p.skip(2)
 	p.skip_whitespace()
 	name := p.collect_id()
+	noerror := name[0] == `.`
+	tag_name := if noerror { name[1..] } else { name }
 
 	for p.ch != `\0` {
 		p.skip_whitespace()
@@ -63,6 +73,57 @@ fn (mut p Parser) collect_block() []u8 {
 		p.skip(1)
 	}
 	p.skip(2)
+
+	if tag_name.bytestr() !in p.tags {
+		if noerror {
+			return []u8{}
+		} else {
+			panic("Unknown block tag: " + tag_name.bytestr())
+		}
+	}
+
+	block_tag := p.tags[tag_name.bytestr()]
+
+	content := block_tag.handle(
+		value.bytestr(), 
+		if block_tag.self_closing {
+			""
+		} else {
+			p.collect_end_block(tag_name).bytestr()
+		}
+	)
+	
+	mut content_parser := new(content)
+	return content_parser.parse().bytes()
+}
+
+fn (mut p Parser) collect_end_block(open_block_name []u8) []u8 {
+	mut value := []u8{}
+	mut i := 0
+
+	for p.ch != `\0` {
+		if p.ch == `{` && p.next_ch == `[` {
+			p.skip(2)
+			skipped := p.skip_whitespace()
+			name := p.collect_id()
+			tag_name := if name[0] == `.` { name[1..] } else { name }
+			if tag_name.bytestr() == "end" + open_block_name.bytestr() || 
+				tag_name.bytestr() == ".end" + open_block_name.bytestr() {
+				i -= 1
+				if i <= 0 {
+					p.skip_whitespace()
+					p.skip(2)
+					break
+				}
+			} else if tag_name == open_block_name {
+				i += 1
+			}
+			p.skip(-skipped - name.len - 2)
+		}
+
+		value << p.ch
+		p.skip(1)
+	}
 
 	return value
 }
@@ -121,8 +182,13 @@ fn (mut p Parser) skip(size int) {
 	}
 }
 
-fn (mut p Parser) skip_whitespace() {
+fn (mut p Parser) skip_whitespace() int {
+	mut skipped := 0
+
 	for p.ch.is_space() {
 		p.skip(1)
+		skipped += 1
 	}
+
+	return skipped
 }
