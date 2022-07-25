@@ -6,8 +6,9 @@ pub struct Parser {
 	pub:
 		input string
 	mut:
+		original_input string
 		pos int = -1
-		line int
+		line int = 1
 		col int
 		ch u8
 		prev_ch u8
@@ -22,16 +23,17 @@ pub fn new(input string, tags ...Tag) Parser {
 
 	mut p := Parser {
 		input: input,
+		original_input: input,
 		tags: tags_map
 	}
 
-	p.skip(2)
+	p.skip(1)
 
 	return p
 }
 
 pub fn (mut p Parser) parse() string {
-	mut value := [p.prev_ch]
+	mut value := []u8{}
 
 	for p.ch != `\0` {
 		if p.ch == `{` {
@@ -53,14 +55,19 @@ fn (mut p Parser) collect_block() []u8 {
 	mut value := []u8{}
 	mut i := 1
 
-	p.skip(2)
-	p.skip_whitespace()
+	mut line := p.line
+	mut col := p.col
+	mut size := 0
+
+	size += p.skip(2)
+	size += p.skip_whitespace()
 	name := p.collect_id()
+	size += name.len
 	noerror := name[0] == `.`
 	tag_name := if noerror { name[1..] } else { name }
 
 	for p.ch != `\0` {
-		p.skip_whitespace()
+		size += p.skip_whitespace()
 		if p.ch == `{` && p.next_ch == `[` {
 			i += 1
 		} else if p.ch == `]` && p.next_ch == `}` {
@@ -70,20 +77,29 @@ fn (mut p Parser) collect_block() []u8 {
 			}
 		}
 		value << p.ch
-		p.skip(1)
+		size += p.skip(1)
 	}
-	p.skip(2)
+	size += p.skip(2)
 
 	if tag_name.bytestr() !in p.tags {
 		if noerror {
 			return []u8{}
 		} else {
-			panic("Unknown block tag: " + tag_name.bytestr())
+			panic_error(
+				"TagError", 
+				"Unknown tag ${tag_name.bytestr()} at line ${line}, col ${col}",
+				p.original_input.split("\n"),
+				line,
+				col,
+				size
+			)
 		}
 	}
 
 	block_tag := p.tags[tag_name.bytestr()]
 
+	line = p.line
+	col = p.col
 	content := block_tag.handle(
 		value.bytestr(), 
 		if block_tag.self_closing {
@@ -93,7 +109,10 @@ fn (mut p Parser) collect_block() []u8 {
 		}
 	)
 	
-	mut content_parser := new(content)
+	mut content_parser := new(content, ...p.tags.values())
+	content_parser.original_input = p.original_input
+	content_parser.line = line
+	content_parser.col = col
 	return content_parser.parse().bytes()
 }
 
@@ -167,7 +186,7 @@ fn (mut p Parser) collect_id() []u8 {
 	return value
 }
 
-fn (mut p Parser) skip(size int) {
+fn (mut p Parser) skip(size int) int {
 	p.pos += size
 
 	p.prev_ch = p.input[p.pos - 1] or { `\0` }
@@ -176,10 +195,12 @@ fn (mut p Parser) skip(size int) {
 
 	if p.ch == `\n` {
 		p.line += 1
-		p.col = 1
+		p.col = 0
 	} else {
 		p.col += 1
 	}
+
+	return size
 }
 
 fn (mut p Parser) skip_whitespace() int {
