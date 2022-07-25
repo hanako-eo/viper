@@ -1,6 +1,8 @@
 module main
 
 pub struct Parser {
+	filename string
+
 	pub mut:
 		context Context
 		tags map[string]Tag
@@ -16,13 +18,14 @@ pub struct Parser {
 		next_ch u8
 }
 
-pub fn new(input string, context Context, tags ...Tag) Parser {
+pub fn new(filename string, input string, context Context, tags ...Tag) Parser {
 	mut tags_map := map[string]Tag{}
 	for tag in tags {
 		tags_map[tag.name] = tag
 	}
 
 	mut p := Parser {
+		filename: filename,
 		input: input,
 		original_input: input,
 		tags: tags_map
@@ -33,15 +36,22 @@ pub fn new(input string, context Context, tags ...Tag) Parser {
 	return p
 }
 
-pub fn (mut p Parser) parse() string {
+pub fn (mut p Parser) parse() (string, []IError) {
+	mut errors := []IError{}
 	mut value := []u8{}
 
 	for p.ch != `\0` {
 		if p.ch == `{` {
 			if p.next_ch == `[` {
-				value << p.collect_block()
+				value << p.collect_block(mut errors) or {
+					errors << err
+					continue
+				}
 			} else {
-				value << p.collect_var()
+				value << p.collect_var() or {
+					errors << err
+					continue
+				}
 			}
 		}
 
@@ -49,10 +59,10 @@ pub fn (mut p Parser) parse() string {
 		p.skip(1)
 	}
 
-	return value.bytestr()
+	return value.bytestr(), errors
 }
 
-fn (mut p Parser) collect_block() []u8 {
+fn (mut p Parser) collect_block(errors mut []IError) ?[]u8 {
 	mut value := []u8{}
 	mut i := 1
 
@@ -86,14 +96,14 @@ fn (mut p Parser) collect_block() []u8 {
 		if noerror {
 			return []u8{}
 		} else {
-			panic_error(
-				"TagError", 
-				"Unknown tag ${tag_name.bytestr()} at line ${line}, col ${col}",
-				p.original_input.split("\n"),
-				line,
-				col,
-				size
-			)
+			return IError(TagError{
+				filename: p.filename,
+				message: "Unknown tag ${tag_name.bytestr()}",
+				lines: p.original_input.split("\n"),
+				line: line,
+				col: col,
+				size: size
+			})
 		}
 	}
 
@@ -110,11 +120,13 @@ fn (mut p Parser) collect_block() []u8 {
 		}
 	)
 	
-	mut content_parser := new(content, p.context, ...p.tags.values())
+	mut content_parser := new(p.filename, content, p.context, ...p.tags.values())
 	content_parser.original_input = p.original_input
 	content_parser.line = line
 	content_parser.col = col
-	return content_parser.parse().bytes()
+	parsed, errs := content_parser.parse()
+	errors << errs
+	return parsed.bytes()
 }
 
 fn (mut p Parser) collect_end_block(open_block_name []u8) []u8 {
@@ -148,7 +160,7 @@ fn (mut p Parser) collect_end_block(open_block_name []u8) []u8 {
 	return value
 }
 
-fn (mut p Parser) collect_var() []u8 {
+fn (mut p Parser) collect_var() ?[]u8 {
 	mut value := []u8{}
 	mut i := 1
 	
@@ -180,14 +192,14 @@ fn (mut p Parser) collect_var() []u8 {
 		if noerror {
 			return []u8{}
 		} else {
-			panic_error(
-				"VarError", 
-				"Unknown variable ${var.bytestr()} at line ${p.line}, col ${p.col}",
-				p.original_input.split("\n"),
-				line,
-				col,
-				size
-			)
+			return IError(VarError{
+				filename: p.filename,
+				message: "Unknown variable ${var.bytestr()}",
+				lines: p.original_input.split("\n"),
+				line: line,
+				col: col,
+				size: size
+			})
 		}
 	}
 
