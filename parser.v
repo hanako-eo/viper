@@ -2,6 +2,7 @@ module main
 
 pub struct Parser {
 	pub mut:
+		context Context
 		tags map[string]Tag
 	pub:
 		input string
@@ -15,7 +16,7 @@ pub struct Parser {
 		next_ch u8
 }
 
-pub fn new(input string, tags ...Tag) Parser {
+pub fn new(input string, context Context, tags ...Tag) Parser {
 	mut tags_map := map[string]Tag{}
 	for tag in tags {
 		tags_map[tag.name] = tag
@@ -109,7 +110,7 @@ fn (mut p Parser) collect_block() []u8 {
 		}
 	)
 	
-	mut content_parser := new(content, ...p.tags.values())
+	mut content_parser := new(content, p.context, ...p.tags.values())
 	content_parser.original_input = p.original_input
 	content_parser.line = line
 	content_parser.col = col
@@ -150,10 +151,15 @@ fn (mut p Parser) collect_end_block(open_block_name []u8) []u8 {
 fn (mut p Parser) collect_var() []u8 {
 	mut value := []u8{}
 	mut i := 1
+	
+	mut line := p.line
+	mut col := p.col
+	mut size := 0
 
-	p.skip(1)
+	col += p.skip(1)
+	col += p.skip_whitespace()
 	for p.ch != `\0` {
-		p.skip_whitespace()
+		skipped_whitespace := p.skip_whitespace()
 		if p.ch == `{` {
 			i += 1
 		} else if p.ch == `}` {
@@ -163,11 +169,29 @@ fn (mut p Parser) collect_var() []u8 {
 			}
 		}
 		value << p.ch
-		p.skip(1)
+		size += p.skip(1) + skipped_whitespace
 	}
 	p.skip(1)
 
-	return value
+	noerror := value[0] == `.`
+	var := if noerror { value[1..] } else { value }
+
+	if var.bytestr() !in p.context.data {
+		if noerror {
+			return []u8{}
+		} else {
+			panic_error(
+				"VarError", 
+				"Unknown variable ${var.bytestr()} at line ${p.line}, col ${p.col}",
+				p.original_input.split("\n"),
+				line,
+				col,
+				size
+			)
+		}
+	}
+
+	return p.context.data[var.bytestr()].bytes()
 }
 
 fn (mut p Parser) collect_id() []u8 {
