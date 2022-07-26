@@ -6,7 +6,7 @@ struct Parser {
 		filename string
 		input string
 	mut:
-		original_input string
+		current_input string
 		pos int = -1
 		line int = 1
 		col int
@@ -18,8 +18,8 @@ struct Parser {
 fn new_parser(filename string, input string, runtime ViperRuntime) Parser {
 	mut p := Parser {
 		filename: filename,
+		current_input: input,
 		input: input,
-		original_input: input,
 		runtime: &runtime,
 	}
 
@@ -55,7 +55,7 @@ fn (mut p Parser) parse(variables map[string]string) (string, []IError) {
 }
 
 fn (mut p Parser) collect_block(variables map[string]string, mut errors []IError) ?[]u8 {
-	mut value := []u8{}
+	mut args := []u8{}
 	mut i := 1
 
 	mut line := p.line
@@ -79,7 +79,7 @@ fn (mut p Parser) collect_block(variables map[string]string, mut errors []IError
 				break
 			}
 		}
-		value << p.ch
+		args << p.ch
 		size += p.skip(1)
 	}
 	size += p.skip(2)
@@ -91,7 +91,7 @@ fn (mut p Parser) collect_block(variables map[string]string, mut errors []IError
 			return IError(TagError{
 				filename: p.filename,
 				message: "Unknown tag ${tag_name.bytestr()}",
-				lines: p.original_input.split("\n"),
+				lines: p.input.split("\n"),
 				line: line,
 				col: col,
 				size: size
@@ -103,19 +103,27 @@ fn (mut p Parser) collect_block(variables map[string]string, mut errors []IError
 
 	line = p.line
 	col = p.col
-	content := block_tag.handle(
-		value.bytestr(), 
-		if block_tag.self_closing {
-			""
-		} else {
-			p.collect_end_block(tag_name).bytestr()
-		}
+
+	mut value := if block_tag.self_closing {
+		""
+	} else {
+		p.collect_end_block(tag_name).bytestr()
+	}
+	for plugin in p.runtime.plugins {
+		value = plugin.before_block_call(block_tag, args.bytestr(), value, variables, p)
+	}
+	value = block_tag.handle(
+		args.bytestr(),
+		value
 	)
+	for plugin in p.runtime.plugins {
+		value = plugin.after_block_call(block_tag, args.bytestr(), value, variables, p)
+	}
 	
 	mut content_parser := Parser {
 		filename: p.filename,
-		input: content,
-		original_input: p.original_input,
+		current_input: value,
+		input: p.input,
 		runtime: p.runtime,
 		line: line,
 		col: col,
@@ -194,7 +202,7 @@ fn (mut p Parser) collect_var(variables map[string]string) ?[]u8 {
 			return IError(VarError{
 				filename: p.filename,
 				message: "Unknown variable ${var.bytestr()}",
-				lines: p.original_input.split("\n"),
+				lines: p.input.split("\n"),
 				line: line,
 				col: col,
 				size: size
@@ -224,9 +232,9 @@ fn (mut p Parser) collect_id() []u8 {
 fn (mut p Parser) skip(size int) int {
 	p.pos += size
 
-	p.prev_ch = p.input[p.pos - 1] or { `\0` }
-	p.ch = p.input[p.pos] or { `\0` }
-	p.next_ch = p.input[p.pos + 1] or { `\0` }
+	p.prev_ch = p.current_input[p.pos - 1] or { `\0` }
+	p.ch = p.current_input[p.pos] or { `\0` }
+	p.next_ch = p.current_input[p.pos + 1] or { `\0` }
 
 	if p.ch == `\n` {
 		p.line += 1
