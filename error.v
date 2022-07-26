@@ -53,3 +53,11 @@ struct VarError {
 fn (err VarError) msg() string {
 	return "\033[36m${err.filename}\033[0m (\033[33m${err.line+1}\033[0m:\033[33m${err.col}\033[0m) \033[31mVarError\033[0m: ${err.message}\n${err.get_lines()}"
 }
+
+struct SyntaxError {
+	TagError
+}
+
+fn (err SyntaxError) msg() string {
+	return "\033[36m${err.filename}\033[0m (\033[33m${err.line+1}\033[0m:\033[33m${err.col}\033[0m) \033[31mSyntaxError\033[0m: ${err.message}\n${err.get_lines()}"
+}

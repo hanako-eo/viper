@@ -1,5 +1,9 @@
 module main
 
+fn min<T>(a T, b T) T {
+	return if a < b { a } else { b }
+}
+
 struct Parser {
 	pub:
 		runtime &ViperRuntime
@@ -82,6 +86,20 @@ fn (mut p Parser) collect_block(variables map[string]string, mut errors []IError
 		args << p.ch
 		size += p.skip(1)
 	}
+
+	if p.ch == `\0` {
+		c := if p.prev_ch == `]` { "}" } else { "]}" }
+
+		return IError(SyntaxError{
+			filename: p.filename,
+			message: "Unclosed tag block (expected '${c}')",
+			lines: p.input.split("\n"),
+			line: line,
+			col: col,
+			size: 2
+		})
+	}
+
 	size += p.skip(2)
 
 	if tag_name.bytestr() !in p.runtime.tags {
@@ -103,11 +121,10 @@ fn (mut p Parser) collect_block(variables map[string]string, mut errors []IError
 
 	line = p.line
 	col = p.col
-
 	mut value := if block_tag.self_closing {
 		""
 	} else {
-		p.collect_end_block(tag_name).bytestr()
+		p.collect_end_block(tag_name)?.bytestr()
 	}
 	for plugin in p.runtime.plugins {
 		value = plugin.before_block_call(block_tag, args.bytestr(), value, variables, p)
@@ -136,21 +153,38 @@ fn (mut p Parser) collect_block(variables map[string]string, mut errors []IError
 	return parsed.bytes()
 }
 
-fn (mut p Parser) collect_end_block(open_block_name []u8) []u8 {
+fn (mut p Parser) collect_end_block(open_block_name []u8) ?[]u8 {
 	mut value := []u8{}
 	mut i := 0
 
+	mut line := p.line
+	mut col := p.col
+
 	for p.ch != `\0` {
 		if p.ch == `{` && p.next_ch == `[` {
+			line = p.line
+			col = p.col
 			p.skip(2)
 			skipped := p.skip_whitespace()
 			name := p.collect_id()
 			tag_name := if name[0] == `.` { name[1..] } else { name }
-			if tag_name.bytestr() == "end" + open_block_name.bytestr() || 
-				tag_name.bytestr() == ".end" + open_block_name.bytestr() {
+			if tag_name.bytestr() == "end" + open_block_name.bytestr() {
 				i -= 1
 				if i <= 0 {
 					p.skip_whitespace()
+					println("${p.ch.ascii_str()}${p.next_ch.ascii_str()}")
+					if p.ch != `]` || p.next_ch != `}` {
+						c := if p.ch == `]` { "}" } else { "]}" }
+
+						return IError(SyntaxError{
+							filename: p.filename,
+							message: "Unclosed end tag (expected '${c}')",
+							lines: p.input.split("\n"),
+							line: line,
+							col: col,
+							size: 2
+						})
+					}
 					p.skip(2)
 					break
 				}
@@ -175,8 +209,8 @@ fn (mut p Parser) collect_var(variables map[string]string) ?[]u8 {
 	mut col := p.col
 	mut size := 0
 
-	col += p.skip(1)
-	col += p.skip_whitespace()
+	space_ch_var := p.skip(1) + p.skip_whitespace()
+	col += space_ch_var
 	for p.ch != `\0` {
 		skipped_whitespace := p.skip_whitespace()
 		if p.ch == `{` {
@@ -190,6 +224,18 @@ fn (mut p Parser) collect_var(variables map[string]string) ?[]u8 {
 		value << p.ch
 		size += p.skip(1) + skipped_whitespace
 	}
+
+	if p.ch == `\0` {
+		return IError(SyntaxError{
+			filename: p.filename,
+			message: "Unclosed variable block (expected '}')",
+			lines: p.input.split("\n"),
+			line: line,
+			col: col - space_ch_var,
+			size: 1
+		})
+	}
+
 	p.skip(1)
 
 	noerror := value[0] == `.`
@@ -230,7 +276,7 @@ fn (mut p Parser) collect_id() []u8 {
 }
 
 fn (mut p Parser) skip(size int) int {
-	p.pos += size
+	p.pos = min(p.pos + size, p.current_input.len)
 
 	p.prev_ch = p.current_input[p.pos - 1] or { `\0` }
 	p.ch = p.current_input[p.pos] or { `\0` }
