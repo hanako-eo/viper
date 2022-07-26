@@ -1,12 +1,9 @@
 module main
 
 pub struct Parser {
-	filename string
-
-	pub mut:
-		context Context
-		tags map[string]Tag
 	pub:
+		runtime &ViperRuntime
+		filename string
 		input string
 	mut:
 		original_input string
@@ -18,17 +15,12 @@ pub struct Parser {
 		next_ch u8
 }
 
-pub fn new(filename string, input string, context Context, tags ...Tag) Parser {
-	mut tags_map := map[string]Tag{}
-	for tag in tags {
-		tags_map[tag.name] = tag
-	}
-
+pub fn new_parser(filename string, input string, runtime ViperRuntime) Parser {
 	mut p := Parser {
 		filename: filename,
 		input: input,
 		original_input: input,
-		tags: tags_map
+		runtime: &runtime,
 	}
 
 	p.skip(1)
@@ -36,19 +28,19 @@ pub fn new(filename string, input string, context Context, tags ...Tag) Parser {
 	return p
 }
 
-pub fn (mut p Parser) parse() (string, []IError) {
+pub fn (mut p Parser) parse(variables map[string]string) (string, []IError) {
 	mut errors := []IError{}
 	mut value := []u8{}
 
 	for p.ch != `\0` {
 		if p.ch == `{` {
 			if p.next_ch == `[` {
-				value << p.collect_block(mut errors) or {
+				value << p.collect_block(variables, mut errors) or {
 					errors << err
 					continue
 				}
 			} else {
-				value << p.collect_var() or {
+				value << p.collect_var(variables) or {
 					errors << err
 					continue
 				}
@@ -62,7 +54,7 @@ pub fn (mut p Parser) parse() (string, []IError) {
 	return value.bytestr(), errors
 }
 
-fn (mut p Parser) collect_block(errors mut []IError) ?[]u8 {
+fn (mut p Parser) collect_block(variables map[string]string, errors mut []IError) ?[]u8 {
 	mut value := []u8{}
 	mut i := 1
 
@@ -92,7 +84,7 @@ fn (mut p Parser) collect_block(errors mut []IError) ?[]u8 {
 	}
 	size += p.skip(2)
 
-	if tag_name.bytestr() !in p.tags {
+	if tag_name.bytestr() !in p.runtime.tags {
 		if noerror {
 			return []u8{}
 		} else {
@@ -107,7 +99,7 @@ fn (mut p Parser) collect_block(errors mut []IError) ?[]u8 {
 		}
 	}
 
-	block_tag := p.tags[tag_name.bytestr()]
+	block_tag := p.runtime.tags[tag_name.bytestr()]
 
 	line = p.line
 	col = p.col
@@ -120,12 +112,19 @@ fn (mut p Parser) collect_block(errors mut []IError) ?[]u8 {
 		}
 	)
 	
-	mut content_parser := new(p.filename, content, p.context, ...p.tags.values())
-	content_parser.original_input = p.original_input
-	content_parser.line = line
-	content_parser.col = col
-	parsed, errs := content_parser.parse()
+	mut content_parser := Parser {
+		filename: p.filename,
+		input: content,
+		original_input: p.original_input,
+		runtime: p.runtime,
+		line: line,
+		col: col,
+	}
+	content_parser.skip(1)
+
+	parsed, errs := content_parser.parse(variables)
 	errors << errs
+
 	return parsed.bytes()
 }
 
@@ -160,7 +159,7 @@ fn (mut p Parser) collect_end_block(open_block_name []u8) []u8 {
 	return value
 }
 
-fn (mut p Parser) collect_var() ?[]u8 {
+fn (mut p Parser) collect_var(variables map[string]string) ?[]u8 {
 	mut value := []u8{}
 	mut i := 1
 	
@@ -188,7 +187,7 @@ fn (mut p Parser) collect_var() ?[]u8 {
 	noerror := value[0] == `.`
 	var := if noerror { value[1..] } else { value }
 
-	if var.bytestr() !in p.context.data {
+	if var.bytestr() !in variables {
 		if noerror {
 			return []u8{}
 		} else {
@@ -203,7 +202,7 @@ fn (mut p Parser) collect_var() ?[]u8 {
 		}
 	}
 
-	return p.context.data[var.bytestr()].bytes()
+	return variables[var.bytestr()].bytes()
 }
 
 fn (mut p Parser) collect_id() []u8 {

@@ -1,5 +1,16 @@
 module main
 
+struct FileError {
+	Error
+
+	filename string
+	message string
+}
+
+fn (err FileError) msg() string {
+	return "\033[36m${err.filename}\033[0m \033[31mFileError\033[0m: ${err.message}"
+}
+
 struct TagError {
 	Error
 
