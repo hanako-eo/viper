@@ -10,7 +10,3 @@ pub fn new_context(data map[string]string) Context {
 		data: data
 	}
 }
-
-pub fn (c Context) get(key string) string {
-	return c.data[key].str()
-}
