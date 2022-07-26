@@ -1,6 +1,6 @@
 module main
 
-pub struct Parser {
+struct Parser {
 	pub:
 		runtime &ViperRuntime
 		filename string
@@ -15,7 +15,7 @@ pub struct Parser {
 		next_ch u8
 }
 
-pub fn new_parser(filename string, input string, runtime ViperRuntime) Parser {
+fn new_parser(filename string, input string, runtime ViperRuntime) Parser {
 	mut p := Parser {
 		filename: filename,
 		input: input,
@@ -28,7 +28,7 @@ pub fn new_parser(filename string, input string, runtime ViperRuntime) Parser {
 	return p
 }
 
-pub fn (mut p Parser) parse(variables map[string]string) (string, []IError) {
+fn (mut p Parser) parse(variables map[string]string) (string, []IError) {
 	mut errors := []IError{}
 	mut value := []u8{}
 
@@ -54,7 +54,7 @@ pub fn (mut p Parser) parse(variables map[string]string) (string, []IError) {
 	return value.bytestr(), errors
 }
 
-fn (mut p Parser) collect_block(variables map[string]string, errors mut []IError) ?[]u8 {
+fn (mut p Parser) collect_block(variables map[string]string, mut errors []IError) ?[]u8 {
 	mut value := []u8{}
 	mut i := 1
 
