@@ -43,7 +43,7 @@ fn (err TagError) get_lines() string {
 }
 
 fn (err TagError) msg() string {
-	return "\033[36m${err.filename}\033[0m (\033[33m${err.line+1}\033[0m:\033[33m${err.col}\033[0m) \033[31mTagError\033[0m: ${err.message}\n${err.get_lines()}"
+	return "\033[36m${err.filename}\033[0m (\033[33m${err.line}\033[0m:\033[33m${err.col}\033[0m) \033[31mTagError\033[0m: ${err.message}\n${err.get_lines()}"
 }
 
 struct VarError {
@@ -51,7 +51,7 @@ struct VarError {
 }
 
 fn (err VarError) msg() string {
-	return "\033[36m${err.filename}\033[0m (\033[33m${err.line+1}\033[0m:\033[33m${err.col}\033[0m) \033[31mVarError\033[0m: ${err.message}\n${err.get_lines()}"
+	return "\033[36m${err.filename}\033[0m (\033[33m${err.line}\033[0m:\033[33m${err.col}\033[0m) \033[31mVarError\033[0m: ${err.message}\n${err.get_lines()}"
 }
 
 struct SyntaxError {
@@ -59,5 +59,5 @@ struct SyntaxError {
 }
 
 fn (err SyntaxError) msg() string {
-	return "\033[36m${err.filename}\033[0m (\033[33m${err.line+1}\033[0m:\033[33m${err.col}\033[0m) \033[31mSyntaxError\033[0m: ${err.message}\n${err.get_lines()}"
+	return "\033[36m${err.filename}\033[0m (\033[33m${err.line}\033[0m:\033[33m${err.col}\033[0m) \033[31mSyntaxError\033[0m: ${err.message}\n${err.get_lines()}"
 }

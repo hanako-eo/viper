@@ -88,11 +88,9 @@ fn (mut p Parser) collect_block(variables map[string]string, mut errors []IError
 	}
 
 	if p.ch == `\0` {
-		c := if p.prev_ch == `]` { "}" } else { "]}" }
-
 		return IError(SyntaxError{
 			filename: p.filename,
-			message: "Unclosed tag block (expected '${c}')",
+			message: "Unclosed tag block (expected ']}')",
 			lines: p.input.split("\n"),
 			line: line,
 			col: col,
