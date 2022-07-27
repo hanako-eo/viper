@@ -172,7 +172,6 @@ fn (mut p Parser) collect_end_block(open_block_name []u8) ?[]u8 {
 				i -= 1
 				if i <= 0 {
 					p.skip_whitespace()
-					println("${p.ch.ascii_str()}${p.next_ch.ascii_str()}")
 					if p.ch != `]` || p.next_ch != `}` {
 						c := if p.ch == `]` { "}" } else { "]}" }
 

@@ -40,7 +40,7 @@ pub fn (r ViperRuntime) render(file string, variables map[string]string) string 
 			filename: file,
 			message: "File not found"
 		}
-		println(error.msg())
+		eprintln(error.msg())
 		exit(1)
 	}
 
@@ -54,7 +54,7 @@ pub fn (r ViperRuntime) render(file string, variables map[string]string) string 
 
 	if errors.len > 0 {
 		for error in errors {
-			print(error.msg())
+			eprint(error.msg())
 		}
 		exit(1)
 	}
