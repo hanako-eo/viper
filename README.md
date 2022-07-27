@@ -47,7 +47,7 @@ In example.html:
 ```
 
 ### Example of possible error
-![example of possible error image](example/error.png)
+![example of possible error image](examples/error.jpg)
 
 ## License
 See the [LICENSE](LICENSE) file
